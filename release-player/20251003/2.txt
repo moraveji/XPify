@@ -1,0 +1,7 @@
+Care Team Console
+Unified triage experience
+
+Coaches can now triage members, manage referrals, and coordinate follow-ups from a single dashboard. The new layout surfaces urgent cases automatically.
+
+Bugs: https://example.com/bugs
+Demo: https://example.com/console-demo

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XP Health Release Player</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand">
+        <img
+          src="https://dp97y1xlp9ur8.cloudfront.net/patients/logo-2-black.svg"
+          alt="XP Health logo"
+        />
+        <span>Release Player</span>
+      </div>
+      <div class="release-selector" id="releaseSelector"></div>
+    </header>
+
+    <main class="app-shell" id="releaseView">
+      <section class="album-column" id="albumColumn">
+        <div class="album-art">
+          <img id="albumCover" alt="Album cover" />
+        </div>
+        <div class="album-meta">
+          <h1 id="albumTitle">Release Album</h1>
+          <p class="album-date" id="albumDate"></p>
+          <div id="albumNotes" class="album-notes"></div>
+        </div>
+      </section>
+
+      <div
+        class="splitter"
+        id="columnSplitter"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize panels"
+        tabindex="0"
+      ></div>
+
+      <section class="tracks-column">
+        <h2 class="section-heading">Tracks</h2>
+        <ol class="track-list" id="trackList"></ol>
+      </section>
+
+      <section class="mobile-track" id="mobileTrack">
+        <div class="mobile-track__header">
+          <button class="back-button" id="backToList" aria-label="Back to list">
+            ← Track list
+          </button>
+          <div class="mobile-track__album">
+            <img id="mobileAlbumCover" alt="Album cover" />
+            <div>
+              <p id="mobileAlbumTitle"></p>
+              <p id="mobileAlbumDate"></p>
+            </div>
+          </div>
+        </div>
+        <div class="mobile-track__media">
+          <img id="mobileTrackImage" alt="Track visual" />
+        </div>
+        <div class="mobile-track__text">
+          <h2 id="mobileTrackTitle"></h2>
+          <p class="mobile-track__subtitle" id="mobileTrackSubtitle"></p>
+          <div id="mobileTrackNotes" class="notes-body"></div>
+          <div id="mobileTrackLinks" class="link-buttons"></div>
+        </div>
+      </section>
+      <div class="mobile-tracklist" id="mobileTrackList"></div>
+    </main>
+
+    <section class="albums-view hidden" id="albumsView">
+      <div class="albums-view__inner">
+        <h1 class="albums-view__title">Release Albums</h1>
+        <p class="albums-view__intro">
+          Select a release to open it in the player.
+        </p>
+        <ul class="albums-list" id="albumsList"></ul>
+        <p class="placeholder albums-empty hidden" id="albumsEmpty">
+          Add lines like <code>20251003 | October 3, 2025 Release</code> to
+          <code>albums.txt</code> to populate this list.
+        </p>
+      </div>
+    </section>
+
+    <div class="now-playing" id="nowPlaying">
+      <div class="now-playing__info">
+        <img id="nowPlayingThumb" alt="Track thumbnail" />
+        <div>
+          <p class="now-playing__title" id="nowPlayingTitle"></p>
+          <p class="now-playing__subtitle" id="nowPlayingSubtitle"></p>
+        </div>
+      </div>
+      <div class="now-playing__controls">
+        <button id="prevBtn" aria-label="Previous track">⏮</button>
+        <button id="playPauseBtn" aria-label="Play or pause">▶</button>
+        <button id="nextBtn" aria-label="Next track">⏭</button>
+      </div>
+      <div class="now-playing__progress">
+        <span id="currentTime">0:00</span>
+        <input type="range" id="progressBar" min="0" max="100" value="0" />
+        <span id="duration">0:00</span>
+      </div>
+      <div class="now-playing__links" id="trackLinks"></div>
+    </div>
+
+    <audio id="audio"></audio>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
