@@ -1,6 +1,3 @@
-Image: https://cdn.example.com/shot1.png
-Audio: https://cdn.example.com/track1.mp3
-Kenburns: https://cdn.example.com/shot1-kb.gif
 Member Onboarding Revamp
 Personalized welcome flows
 
