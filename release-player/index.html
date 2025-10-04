@@ -18,7 +18,7 @@
       <div class="release-selector" id="releaseSelector"></div>
     </header>
 
-    <main class="app-shell" id="releaseView">
+    <main class="app-shell">
       <section class="album-column" id="albumColumn">
         <div class="album-art">
           <img id="albumCover" alt="Album cover" />
@@ -29,15 +29,6 @@
           <div id="albumNotes" class="album-notes"></div>
         </div>
       </section>
-
-      <div
-        class="splitter"
-        id="columnSplitter"
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize panels"
-        tabindex="0"
-      ></div>
 
       <section class="tracks-column">
         <h2 class="section-heading">Tracks</h2>
@@ -69,20 +60,6 @@
       </section>
       <div class="mobile-tracklist" id="mobileTrackList"></div>
     </main>
-
-    <section class="albums-view hidden" id="albumsView">
-      <div class="albums-view__inner">
-        <h1 class="albums-view__title">Release Albums</h1>
-        <p class="albums-view__intro">
-          Select a release to open it in the player.
-        </p>
-        <ul class="albums-list" id="albumsList"></ul>
-        <p class="placeholder albums-empty hidden" id="albumsEmpty">
-          Add lines like <code>20251003 | October 3, 2025 Release</code> to
-          <code>albums.txt</code> to populate this list.
-        </p>
-      </div>
-    </section>
 
     <div class="now-playing" id="nowPlaying">
       <div class="now-playing__info">

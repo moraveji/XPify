@@ -14,8 +14,6 @@ const PLACEHOLDER_IMAGE =
       `</svg>`,
   );
 
-const SPLIT_STORAGE_KEY = 'xp.split.left';
-
 const state = {
   releaseId: null,
   tracks: [],
@@ -35,11 +33,6 @@ const elements = {
   albumNotes: document.getElementById('albumNotes'),
   trackList: document.getElementById('trackList'),
   releaseSelector: document.getElementById('releaseSelector'),
-  releaseView: document.getElementById('releaseView'),
-  columnSplitter: document.getElementById('columnSplitter'),
-  albumsView: document.getElementById('albumsView'),
-  albumsList: document.getElementById('albumsList'),
-  albumsEmpty: document.getElementById('albumsEmpty'),
   nowPlaying: document.getElementById('nowPlaying'),
   nowPlayingThumb: document.getElementById('nowPlayingThumb'),
   nowPlayingTitle: document.getElementById('nowPlayingTitle'),
@@ -70,25 +63,18 @@ let isSeeking = false;
 init();
 
 async function init() {
-  setupSplitter();
-  setupEventListeners();
+  let releaseId = qs.get('d');
+  if (!releaseId) {
+    releaseId = await fetchLatestRelease();
+  }
 
-  const releaseIdParam = qs.get('d');
-  if (!releaseIdParam) {
-    await renderAlbumIndex();
+  if (!releaseId) {
+    renderError('No release configured. Add a folder and update latest.txt.');
     return;
   }
 
-  const trimmedReleaseId = releaseIdParam.trim();
-  if (!trimmedReleaseId) {
-    await renderAlbumIndex();
-    return;
-  }
+  await loadRelease(releaseId.trim());
 
-  await loadRelease(trimmedReleaseId);
-}
-
-function setupEventListeners() {
   elements.playPauseBtn.addEventListener('click', togglePlayback);
   elements.prevBtn.addEventListener('click', () => stepTrack(-1));
   elements.nextBtn.addEventListener('click', () => stepTrack(1));
@@ -104,229 +90,37 @@ function setupEventListeners() {
   });
 
   elements.audio.addEventListener('timeupdate', handleTimeUpdate);
-  elements.audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-  elements.audio.addEventListener('play', updateHeroForPlayback);
-  elements.audio.addEventListener('pause', updateHeroForPlayback);
-  elements.audio.addEventListener('ended', handleAudioEnded);
+  elements.audio.addEventListener('loadedmetadata', () => {
+    const current = state.tracks[state.currentIndex];
+    if (current) {
+      current.duration = elements.audio.duration;
+      updateDurationDisplay(state.currentIndex, elements.audio.duration);
+    }
+    updateDuration(elements.audio.duration);
+  });
+  elements.audio.addEventListener('ended', () => stepTrack(1));
 }
 
-function setupSplitter() {
-  const splitter = elements.columnSplitter;
-  const shell = elements.releaseView;
-  if (!splitter || !shell) return;
-
-  let stored = null;
+async function fetchLatestRelease() {
   try {
-    stored = localStorage.getItem(SPLIT_STORAGE_KEY);
+    const res = await fetch('latest.txt', { cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.text()).trim();
   } catch (err) {
-    stored = null;
+    console.warn('Failed to read latest release', err);
+    return null;
   }
-  if (stored) {
-    document.documentElement.style.setProperty('--left', stored);
-  }
-
-  let isDragging = false;
-  let lastValue = stored || null;
-
-  const applyWidth = (px) => {
-    const clamped = Math.round(px);
-    lastValue = `${clamped}px`;
-    document.documentElement.style.setProperty('--left', lastValue);
-  };
-
-  const getGap = () => {
-    const gapValue = window.getComputedStyle(shell).columnGap;
-    const parsed = parseFloat(gapValue);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-
-  const bounds = () => {
-    const rect = shell.getBoundingClientRect();
-    const gap = getGap();
-    const usableWidth = Math.max(rect.width - gap, 320);
-    const min = Math.max(240, Math.min(360, usableWidth * 0.25));
-    const maxRaw = usableWidth - 260;
-    const max = Math.max(min + 120, maxRaw);
-    return { rect, min, max, gap };
-  };
-
-  const handlePointerMove = (event) => {
-    if (!isDragging) return;
-    event.preventDefault();
-    const { rect, min, max, gap } = bounds();
-    let proposed = event.clientX - rect.left - gap / 2;
-    proposed = Math.min(Math.max(proposed, min), max);
-    applyWidth(proposed);
-  };
-
-  const stopDragging = () => {
-    if (!isDragging) return;
-    isDragging = false;
-    splitter.classList.remove('active');
-    document.removeEventListener('pointermove', handlePointerMove);
-    document.removeEventListener('pointerup', stopDragging);
-    if (lastValue) {
-      try {
-        localStorage.setItem(SPLIT_STORAGE_KEY, lastValue);
-      } catch (err) {
-        // ignore storage errors
-      }
-    }
-  };
-
-  splitter.addEventListener('pointerdown', (event) => {
-    if (window.matchMedia('(max-width: 780px)').matches || shell.classList.contains('hidden')) {
-      return;
-    }
-    event.preventDefault();
-    isDragging = true;
-    splitter.classList.add('active');
-    document.addEventListener('pointermove', handlePointerMove);
-    document.addEventListener('pointerup', stopDragging);
-  });
-
-  document.addEventListener('pointercancel', stopDragging);
-
-  splitter.addEventListener('keydown', (event) => {
-    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-    event.preventDefault();
-    const { rect, min, max, gap } = bounds();
-    const currentValue = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue('--left'),
-    )
-      || Math.min(Math.max((rect.width - gap) * 0.7, min), max);
-    const delta = event.key === 'ArrowLeft' ? -24 : 24;
-    const proposed = Math.min(Math.max(currentValue + delta, min), max);
-    applyWidth(proposed);
-    if (lastValue) {
-      try {
-        localStorage.setItem(SPLIT_STORAGE_KEY, lastValue);
-      } catch (err) {
-        // ignore storage errors
-      }
-    }
-  });
-
-  window.addEventListener('resize', () => {
-    if (!lastValue) return;
-    const value = parseFloat(lastValue);
-    const { min, max } = bounds();
-    const clamped = Math.min(Math.max(value, min), max);
-    applyWidth(clamped);
-  });
-}
-
-async function renderAlbumIndex() {
-  state.releaseId = null;
-  state.tracks = [];
-  elements.releaseView.classList.add('hidden');
-  elements.albumsView.classList.remove('hidden');
-  elements.nowPlaying.classList.add('hidden');
-  elements.mobileTrackList.classList.remove('active');
-
-  elements.releaseSelector.innerHTML = '';
-  const prompt = document.createElement('span');
-  prompt.textContent = 'Browse albums';
-  elements.releaseSelector.appendChild(prompt);
-
-  const listing = await fetchOptionalText('albums.txt');
-  elements.albumsList.innerHTML = '';
-
-  if (!listing) {
-    elements.albumsEmpty.classList.remove('hidden');
-    return;
-  }
-
-  const entries = listing
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line && !line.startsWith('#'))
-    .map((line) => {
-      const [idPart, ...titleParts] = line.split('|');
-      const releaseId = idPart ? idPart.trim() : '';
-      if (!/^\d{8}$/.test(releaseId)) return null;
-      const title = titleParts.join('|').trim();
-      return {
-        releaseId,
-        title: title || `XP Health Release — ${formatReleaseDate(releaseId)}`,
-      };
-    })
-    .filter(Boolean);
-
-  if (!entries.length) {
-    elements.albumsEmpty.classList.remove('hidden');
-    return;
-  }
-
-  elements.albumsEmpty.classList.add('hidden');
-
-  entries.forEach((entry) => {
-    const item = document.createElement('li');
-    item.className = 'albums-list__item';
-
-    const link = document.createElement('a');
-    link.className = 'albums-list__link';
-    link.href = `${window.location.pathname}?d=${entry.releaseId}`;
-    link.textContent = entry.title;
-
-    const meta = document.createElement('span');
-    meta.className = 'albums-list__meta';
-    meta.textContent = formatReleaseDate(entry.releaseId);
-
-    item.append(link, meta);
-    elements.albumsList.appendChild(item);
-  });
 }
 
 async function loadRelease(releaseId) {
-  const normalizedId = (releaseId ?? '').trim();
-  if (!normalizedId) {
-    await renderAlbumIndex();
-    return;
-  }
+  state.releaseId = releaseId;
+  updateReleaseSelector(releaseId);
 
-  const folder = normalizedId.replace(/\/+$/, '');
-  state.releaseId = normalizedId;
-  elements.albumsView.classList.add('hidden');
-  elements.releaseView.classList.remove('hidden');
-  elements.nowPlaying.classList.add('hidden');
-  updateReleaseSelector(normalizedId);
-
-  const dateLabel = formatReleaseDate(normalizedId);
+  const dateLabel = formatReleaseDate(releaseId);
   const albumTitle = `XP Health Release — ${dateLabel}`;
-  let albumNotesHtml = '<p class="placeholder">Add `album-notes.txt` to share album context.</p>';
-  let albumCoverSrc = null;
-
-  const albumNotesRaw = await fetchOptionalText(`${folder}/album-notes.txt`);
-  if (albumNotesRaw) {
-    const parsedNotes = parseAlbumNotes(albumNotesRaw);
-    if (parsedNotes.cover) {
-      albumCoverSrc = parsedNotes.cover;
-    }
-    if (parsedNotes.body.trim()) {
-      albumNotesHtml = renderMarkdown(parsedNotes.body.trim());
-    }
-  }
-
-  if (!albumCoverSrc) {
-    const albumCoverUrlOverride = await fetchOptionalText(`${folder}/album-cover.url`);
-    if (albumCoverUrlOverride) {
-      albumCoverSrc = albumCoverUrlOverride.trim();
-    }
-  }
-
-  if (!albumCoverSrc) {
-    const albumCoverUrl = `${folder}/album-cover.png`;
-    const albumCoverExists = await fileExists(albumCoverUrl);
-    if (albumCoverExists) {
-      albumCoverSrc = albumCoverUrl;
-    }
-  }
-
-  if (!albumCoverSrc) {
-    albumCoverSrc = PLACEHOLDER_IMAGE;
-  }
-
+  const albumCoverUrl = `${releaseId}/album-cover.png`;
+  const albumCoverExists = await fileExists(albumCoverUrl);
+  const albumCoverSrc = albumCoverExists ? albumCoverUrl : PLACEHOLDER_IMAGE;
   elements.albumCover.src = albumCoverSrc;
   elements.mobileAlbumCover.src = albumCoverSrc;
   elements.albumCover.alt = `${dateLabel} album cover`;
@@ -336,9 +130,10 @@ async function loadRelease(releaseId) {
   elements.mobileAlbumTitle.textContent = albumTitle;
   elements.mobileAlbumDate.textContent = dateLabel;
 
-  elements.albumNotes.innerHTML = albumNotesHtml;
+  const albumNotes = await fetchOptionalText(`${releaseId}/album-notes.txt`);
+  elements.albumNotes.innerHTML = albumNotes ? renderMarkdown(albumNotes) : '<p class="placeholder">Add `album-notes.txt` to share album context.</p>';
 
-  const tracks = await discoverTracks(folder);
+  const tracks = await discoverTracks(releaseId);
   state.tracks = tracks;
 
   if (!tracks.length) {
@@ -358,14 +153,13 @@ async function loadRelease(releaseId) {
   selectTrack(initialIndex, { autoplay: qs.has('t') && qs.get('autoplay') === '1' });
 }
 
-async function discoverTracks(folder) {
-  const normalizedFolder = folder.replace(/\/+$/, '');
+async function discoverTracks(releaseId) {
   const tracks = [];
   for (let i = 1; i <= 50; i += 1) {
-    const imagePath = `${normalizedFolder}/${i}.png`;
-    const kenburnsPath = `${normalizedFolder}/${i}-kenburns.gif`;
-    const audioPath = `${normalizedFolder}/${i}.mp3`;
-    const textPath = `${normalizedFolder}/${i}.txt`;
+    const imagePath = `${releaseId}/${i}.png`;
+    const kenburnsPath = `${releaseId}/${i}-kenburns.gif`;
+    const audioPath = `${releaseId}/${i}.mp3`;
+    const textPath = `${releaseId}/${i}.txt`;
 
     // eslint-disable-next-line no-await-in-loop
     const [hasImage, hasKenburns, hasAudio, textContent] = await Promise.all([
@@ -377,26 +171,22 @@ async function discoverTracks(folder) {
 
     if (!hasImage && !hasKenburns && !hasAudio && textContent === null) break;
 
-    let parsed = null;
-    if (textContent) {
-      parsed = parseTrackText(textContent, i);
-    }
-
-    const imageOverride = parsed?.image ?? null;
-    const audioOverride = parsed?.audio ?? null;
-    const kenburnsOverride = parsed?.kenburns ?? null;
-
     const track = {
       index: i,
-      image: imageOverride || (hasImage ? imagePath : PLACEHOLDER_IMAGE),
-      kenburns: kenburnsOverride || (hasKenburns ? kenburnsPath : null),
-      audio: audioOverride || (hasAudio ? audioPath : null),
-      title: parsed?.title ?? `Track ${i}`,
-      subtitle: parsed?.subtitle ?? '',
-      bodyHtml: parsed?.bodyHtml ?? '',
-      links: parsed?.links ?? [],
+      image: hasImage ? imagePath : PLACEHOLDER_IMAGE,
+      kenburns: hasKenburns ? kenburnsPath : null,
+      audio: hasAudio ? audioPath : null,
+      title: `Track ${i}`,
+      subtitle: '',
+      bodyHtml: '',
+      links: [],
       duration: null,
     };
+
+    if (textContent) {
+      const parsed = parseTrackText(textContent, i);
+      Object.assign(track, parsed);
+    }
 
     tracks.push(track);
   }
@@ -427,81 +217,17 @@ async function fetchOptionalText(path) {
   }
 }
 
-function parseAlbumNotes(text) {
-  const lines = text.replace(/\r/g, '').split('\n');
-  let cover = null;
-  const body = [];
-
-  lines.forEach((line) => {
-    const match = line.trim().match(/^cover\s*:\s*(https?:\/\/\S+)/i);
-    if (match && !cover) {
-      cover = match[1];
-    } else {
-      body.push(line);
-    }
-  });
-
-  return { cover, body: body.join('\n') };
-}
-
 function parseTrackText(text, index) {
-  const rawLines = text.replace(/\r/g, '').split('\n');
-  const metadata = { image: null, audio: null, kenburns: null };
-  const contentLines = [];
-  let metadataPhase = true;
-  let nonEmptyCount = 0;
-
-  rawLines.forEach((rawLine) => {
-    const trimmed = rawLine.trim();
-    if (metadataPhase) {
-      if (!trimmed) {
-        return;
-      }
-
-      const metaMatch = trimmed.match(/^(image|audio|kenburns)\s*:\s*(https?:\/\/\S+)/i);
-      if (metaMatch) {
-        const key = metaMatch[1].toLowerCase();
-        metadata[key] = metaMatch[2];
-        nonEmptyCount += 1;
-        return;
-      }
-
-      if (/^https?:\/\/\S+$/i.test(trimmed)) {
-        if (!metadata.image && nonEmptyCount === 0) {
-          metadata.image = trimmed;
-          nonEmptyCount += 1;
-          return;
-        }
-        if (!metadata.audio && nonEmptyCount === 1) {
-          metadata.audio = trimmed;
-          nonEmptyCount += 1;
-          return;
-        }
-      }
-
-      metadataPhase = false;
-    }
-
-    contentLines.push(rawLine);
-  });
-
-  while (contentLines.length && !contentLines[0].trim()) {
-    contentLines.shift();
-  }
-
-  const titleLine = contentLines.shift() ?? '';
-  const subtitleLine = contentLines.shift() ?? '';
-  const rest = contentLines.join('\n');
+  const lines = text.replace(/\r/g, '').split('\n');
+  const title = (lines.shift() || `Track ${index}`).trim();
+  const subtitle = (lines.shift() || '').trim();
+  const rest = lines.join('\n');
   const { body, links } = extractLinks(rest);
-
   return {
-    title: titleLine.trim() || `Track ${index}`,
-    subtitle: subtitleLine.trim(),
+    title,
+    subtitle,
     bodyHtml: body ? renderMarkdown(body) : '',
     links,
-    image: metadata.image,
-    audio: metadata.audio,
-    kenburns: metadata.kenburns,
   };
 }
 
@@ -642,15 +368,6 @@ async function hydrateDurations(tracks) {
   );
 }
 
-function handleLoadedMetadata() {
-  const current = state.tracks[state.currentIndex];
-  if (current) {
-    current.duration = elements.audio.duration;
-    updateDurationDisplay(state.currentIndex, elements.audio.duration);
-  }
-  updateDuration(elements.audio.duration);
-}
-
 function getAudioDuration(src) {
   return new Promise((resolve) => {
     const audio = document.createElement('audio');
@@ -690,13 +407,11 @@ function selectTrack(index, options = {}) {
           state.autoplay = true;
           elements.playPauseBtn.textContent = '⏸';
           updateUrl();
-          updateHeroForPlayback();
         })
         .catch(() => {
           state.autoplay = false;
           elements.playPauseBtn.textContent = '▶';
           updateUrl();
-          updateHeroForPlayback();
         });
     } else {
       elements.playPauseBtn.textContent = '▶';
@@ -714,7 +429,6 @@ function selectTrack(index, options = {}) {
   }
 
   updateUrl();
-  updateHeroForPlayback();
 }
 
 function updateTrackContent(track) {
@@ -729,12 +443,8 @@ function updateTrackContent(track) {
 
   renderLinks(track.links, elements.trackLinks);
 
-  const stillImage = track.image || PLACEHOLDER_IMAGE;
-  const animatedImage = track.kenburns || stillImage;
-  elements.mobileTrackImage.dataset.still = stillImage;
-  elements.mobileTrackImage.dataset.playing = animatedImage;
-  elements.mobileTrackImage.src = stillImage;
-  elements.mobileTrackImage.dataset.current = stillImage;
+  const heroImage = track.kenburns || track.image || PLACEHOLDER_IMAGE;
+  elements.mobileTrackImage.src = heroImage;
   elements.mobileTrackImage.alt = `${track.title} visual`;
   elements.mobileTrackTitle.textContent = track.title;
   elements.mobileTrackSubtitle.textContent = track.subtitle;
@@ -773,20 +483,17 @@ function togglePlayback() {
         elements.playPauseBtn.textContent = '⏸';
         state.autoplay = true;
         updateUrl();
-        updateHeroForPlayback();
       })
       .catch(() => {
         elements.playPauseBtn.textContent = '▶';
         state.autoplay = false;
         updateUrl();
-        updateHeroForPlayback();
       });
   } else {
     elements.audio.pause();
     elements.playPauseBtn.textContent = '▶';
     state.autoplay = false;
     updateUrl();
-    updateHeroForPlayback();
   }
 }
 
@@ -794,24 +501,6 @@ function stepTrack(direction) {
   if (!state.tracks.length) return;
   const nextIndex = (state.currentIndex + direction + state.tracks.length) % state.tracks.length;
   selectTrack(nextIndex, { autoplay: true });
-}
-
-function handleAudioEnded() {
-  updateHeroForPlayback();
-  stepTrack(1);
-}
-
-function updateHeroForPlayback() {
-  const track = state.tracks[state.currentIndex];
-  if (!track) return;
-  const stillImage = track.image || PLACEHOLDER_IMAGE;
-  const animatedImage = track.kenburns || stillImage;
-  const shouldAnimate = Boolean(track.kenburns) && !elements.audio.paused;
-  const targetSrc = shouldAnimate ? animatedImage : stillImage;
-  if (elements.mobileTrackImage.dataset.current !== targetSrc) {
-    elements.mobileTrackImage.src = targetSrc;
-    elements.mobileTrackImage.dataset.current = targetSrc;
-  }
 }
 
 function handleTimeUpdate() {
@@ -860,10 +549,6 @@ function updateReleaseSelector(releaseId) {
   baseUrl.searchParams.delete('autoplay');
 
   elements.releaseSelector.innerHTML = '';
-  const albumsLink = document.createElement('a');
-  albumsLink.className = 'release-selector__link';
-  albumsLink.href = window.location.pathname;
-  albumsLink.textContent = 'Albums';
   const label = document.createElement('span');
   label.textContent = `Release ${formatReleaseDate(releaseId)}`;
   const shareLink = document.createElement('a');
@@ -871,7 +556,7 @@ function updateReleaseSelector(releaseId) {
   shareLink.href = baseUrl.toString();
   shareLink.textContent = 'Open album link';
 
-  elements.releaseSelector.append(albumsLink, label, shareLink);
+  elements.releaseSelector.append(label, shareLink);
 }
 
 function updateUrl() {
