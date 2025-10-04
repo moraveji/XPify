@@ -1,0 +1,3 @@
+## November Iterations
+
+Smaller polish drops and infrastructure enhancements rolling out ahead of the holiday season.
