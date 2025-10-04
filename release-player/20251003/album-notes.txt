@@ -1,3 +1,5 @@
+Cover: https://cdn.example.com/album-oct.png
+
 ## Welcome to XP Health
 
 Our October release brings expanded member journeys and a refreshed care team console.
